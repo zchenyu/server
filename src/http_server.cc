@@ -3057,7 +3057,7 @@ HTTPAPIServer::InferRequestClass::InferRequestClass(
     TRITONSERVER_Server* server, evhtp_request_t* req,
     DataCompressor::Type response_compression_type)
     : server_(server), req_(req),
-      response_compression_type_(response_compression_type), response_count_(0)
+      response_compression_type_(response_compression_type)
 {
   evhtp_connection_t* htpconn = evhtp_request_get_connection(req);
   thread_ = htpconn->thread;
@@ -3097,25 +3097,19 @@ HTTPAPIServer::InferRequestClass::InferResponseComplete(
   HTTPAPIServer::InferRequestClass* infer_request =
       reinterpret_cast<HTTPAPIServer::InferRequestClass*>(userp);
 
-  auto response_count = infer_request->IncrementResponseCount();
-
-  // Defer to the callback with the final response
-  if ((flags & TRITONSERVER_RESPONSE_COMPLETE_FINAL) == 0) {
-    LOG_ERROR << "[INTERNAL] received a response without FINAL flag";
-    return;
+  if (response != nullptr) {
+    ++infer_request->response_count_;
   }
 
   TRITONSERVER_Error* err = nullptr;
-  if (response_count != 0) {
+  if (infer_request->response_count_ != 1) {
     err = TRITONSERVER_ErrorNew(
-        TRITONSERVER_ERROR_INTERNAL, std::string(
-                                         "expected a single response, got " +
-                                         std::to_string(response_count + 1))
-                                         .c_str());
-  } else if (response == nullptr) {
-    err = TRITONSERVER_ErrorNew(
-        TRITONSERVER_ERROR_INTERNAL, "received an unexpected null response");
-  } else {
+        TRITONSERVER_ERROR_INTERNAL,
+        std::string(
+            "expected a single response, got " +
+            std::to_string(infer_request->response_count_))
+            .c_str());
+  } else if (response != nullptr) {
     err = infer_request->FinalizeResponse(response);
   }
 
@@ -3126,6 +3120,16 @@ HTTPAPIServer::InferRequestClass::InferResponseComplete(
   }
 #endif  // TRITON_ENABLE_TRACING
 
+  LOG_TRITONSERVER_ERROR(
+      TRITONSERVER_InferenceResponseDelete(response),
+      "deleting inference response");
+
+  // Defer sending the response until FINAL flag is seen or
+  // there is error
+  if ((err == nullptr) && (flags & TRITONSERVER_RESPONSE_COMPLETE_FINAL) == 0) {
+    return;
+  }
+
   if (err == nullptr) {
     evthr_defer(infer_request->thread_, OKReplyCallback, infer_request);
   } else {
@@ -3133,10 +3137,6 @@ HTTPAPIServer::InferRequestClass::InferResponseComplete(
     TRITONSERVER_ErrorDelete(err);
     evthr_defer(infer_request->thread_, BADReplyCallback, infer_request);
   }
-
-  LOG_TRITONSERVER_ERROR(
-      TRITONSERVER_InferenceResponseDelete(response),
-      "deleting inference response");
 }
 
 TRITONSERVER_Error*
@@ -3438,13 +3438,6 @@ HTTPAPIServer::InferRequestClass::SetResponseHeader(
       break;
   }
 }
-
-uint32_t
-HTTPAPIServer::InferRequestClass::IncrementResponseCount()
-{
-  return response_count_++;
-}
-
 
 void
 HTTPAPIServer::Handle(evhtp_request_t* req)
