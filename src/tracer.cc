@@ -363,7 +363,9 @@ TraceManager::InitTracer(const triton::server::TraceConfigMap& config_map)
     case TRACE_MODE_OPENTELEMETRY: {
 #if !defined(_WIN32) && defined(TRITON_ENABLE_TRACING)
       otlp::OtlpHttpExporterOptions opts;
-      otel_resource::ResourceAttributes attributes = {{otel_resource::SemanticConventions::kServiceName, "triton-inference-server"}};
+      otel_resource::ResourceAttributes attributes = {};
+      attributes[otel_resource::SemanticConventions::kServiceName] =
+          "triton-inference-server";
       auto mode_key = std::to_string(TRACE_MODE_OPENTELEMETRY);
       auto otel_options_it = config_map.find(mode_key);
       if (otel_options_it != config_map.end()) {
@@ -376,7 +378,7 @@ TraceManager::InitTracer(const triton::server::TraceConfigMap& config_map)
             auto pos = setting.second.find('=');
             auto key = setting.second.substr(0, pos);
             auto value = setting.second.substr(pos + 1);
-            attributes.SetAttribute(key, value);
+            attributes[key] = value;
           }
         }
       }
