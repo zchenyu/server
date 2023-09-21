@@ -135,7 +135,7 @@ docker pull $TENSORRT_IMAGE
 # Run the TensorRT model generation script in the TensorRT models
 docker run \
   $DOCKER_GPU_ARGS \
-  --rm --entrypoint $HOST_SOURCE_DIR/$TRT_MODEL_SCRIPT \
+  --rm --entrypoint $CONTAINER_SOURCE_DIR/$TRT_MODEL_SCRIPT \
   --mount type=bind,source=$HOST_SOURCE_DIR,target=$CONTAINER_SOURCE_DIR \
   --mount type=bind,source=$HOST_DESTDIR,target=$CONTAINER_DESTDIR \
   --mount type=bind,source=$HOST_DATADEPENDENTDIR,target=$CONTAINER_DATADEPENDENTDIR \
