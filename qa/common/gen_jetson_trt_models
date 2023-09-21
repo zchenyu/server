@@ -58,7 +58,7 @@ CUDA_DEVICE=${RUNNER_ID:=0}
 HOST_BUILD_DIR=${HOST_BUILD_DIR:=/tmp}
 TMP_DIR=${TMP_DIR:="$HOST_BUILD_DIR/${TRITON_VERSION}"}
 
-SRCDIR=$HOST_BUILD_DIR/gen_srcdir
+HOST_SRCDIR=$HOST_BUILD_DIR/gen_srcdir
 DESTDIR=$TMP_DIR/qa_model_repository
 
 DATADEPENDENTDIR=$TMP_DIR/qa_trt_data_dependent_model_repository
@@ -93,7 +93,7 @@ rm -fr $VARDESTDIR
 rm -fr $VARIMPLICITSEQDESTDIR
 rm -fr $VARSEQDESTDIR
 
-mkdir -p $SRCDIR
+mkdir -p $HOST_SRCDIR
 mkdir -p $DESTDIR
 
 mkdir -p $DATADEPENDENTDIR
@@ -111,23 +111,27 @@ mkdir -p $VARDESTDIR
 mkdir -p $VARIMPLICITSEQDESTDIR
 mkdir -p $VARSEQDESTDIR
 
-cp ./gen_ensemble_model_utils.py $SRCDIR/.
-cp ./gen_qa_dyna_sequence_implicit_models.py $SRCDIR/.
-cp ./gen_qa_dyna_sequence_models.py $SRCDIR/.
-cp ./gen_qa_identity_models.py $SRCDIR/.
-cp ./gen_qa_implicit_models.py $SRCDIR/.
-cp ./gen_qa_models.py $SRCDIR/.
-cp ./gen_qa_noshape_models.py $SRCDIR/.
-cp ./gen_qa_ragged_models.py $SRCDIR/.
-cp ./gen_qa_reshape_models.py $SRCDIR/.
-cp ./gen_qa_sequence_models.py $SRCDIR/.
-cp ./gen_qa_trt_data_dependent_shape.py $SRCDIR/.
-cp ./gen_qa_trt_format_models.py $SRCDIR/.
-cp ./gen_qa_trt_plugin_models.py $SRCDIR/.
-cp ./test_util.py $SRCDIR/.
+cp ./gen_ensemble_model_utils.py $HOST_SRCDIR/.
+cp ./gen_qa_dyna_sequence_implicit_models.py $HOST_SRCDIR/.
+cp ./gen_qa_dyna_sequence_models.py $HOST_SRCDIR/.
+cp ./gen_qa_identity_models.py $HOST_SRCDIR/.
+cp ./gen_qa_implicit_models.py $HOST_SRCDIR/.
+cp ./gen_qa_models.py $HOST_SRCDIR/.
+cp ./gen_qa_noshape_models.py $HOST_SRCDIR/.
+cp ./gen_qa_ragged_models.py $HOST_SRCDIR/.
+cp ./gen_qa_reshape_models.py $HOST_SRCDIR/.
+cp ./gen_qa_sequence_models.py $HOST_SRCDIR/.
+cp ./gen_qa_trt_data_dependent_shape.py $HOST_SRCDIR/.
+cp ./gen_qa_trt_format_models.py $HOST_SRCDIR/.
+cp ./gen_qa_trt_plugin_models.py $HOST_SRCDIR/.
+cp ./test_util.py $HOST_SRCDIR/.
 
 # TensorRT
-set -e
+TRTSCRIPT=trt_gen.cmds
+cat >$SRCDIR/$TRTSCRIPT <<EOF
+#!/bin/bash -xe
+umask 0000 # make generated files accessible outside of container
+nvidia-smi -L || true
 export TRT_SUPPRESS_DEPRECATION_WARNINGS=1
 cd $SRCDIR
 # Models using shape tensor i/o
