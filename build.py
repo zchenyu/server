@@ -1847,7 +1847,7 @@ def backend_build(
                 os.environ["REMOVE_ME_TRTLLM_TOKEN"],
             )
         )
-    # tensorrtllm_prebuild(cmake_script)
+        tensorrtllm_prebuild(cmake_script)
 
     cmake_script.mkdir(repo_build_dir)
     cmake_script.cwd(repo_build_dir)
