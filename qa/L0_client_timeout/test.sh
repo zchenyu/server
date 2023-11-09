@@ -40,7 +40,7 @@ fi
 
 export CUDA_VISIBLE_DEVICES=0
 TIMEOUT_VALUE=100000000
-SHORT_TIMEOUT_VALUE=1000
+SHORT_TIMEOUT_VALUE=1
 RET=0
 
 CLIENT_TIMEOUT_TEST=client_timeout_test.py
@@ -92,7 +92,7 @@ kill $SERVER_PID
 wait $SERVER_PID
 
 # Test infer APIs
-export TRITONSERVER_SERVER_DELAY_GRPC_RESPONSE_SEC=
+unset TRITONSERVER_SERVER_DELAY_GRPC_RESPONSE_SEC
 SERVER_ARGS="--model-repository=$DATADIR"
 sed -i 's#value: { string_value: "1" }#value: { string_value: "0" }#' $DATADIR/custom_identity_int32/config.pbtxt
 run_server

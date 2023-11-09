@@ -92,10 +92,11 @@ class CommonCallData : public ICallData {
       const StandardRegisterFunc OnRegister,
       const StandardCallbackFunc OnExecute, const bool async,
       ::grpc::ServerCompletionQueue* cq,
-      const std::pair<std::string, std::string>& restricted_kv)
+      const std::pair<std::string, std::string>& restricted_kv,
+      const uint64_t& response_delay = 0)
       : name_(name), id_(id), OnRegister_(OnRegister), OnExecute_(OnExecute),
         async_(async), cq_(cq), responder_(&ctx_), step_(Steps::START),
-        restricted_kv_(restricted_kv)
+        restricted_kv_(restricted_kv), response_delay_(response_delay)
   {
     OnRegister_(&ctx_, &request_, &responder_, this);
     LOG_VERBOSE(1) << "Ready for RPC '" << name_ << "', " << id_;
@@ -138,6 +139,7 @@ class CommonCallData : public ICallData {
   std::thread async_thread_;
 
   Steps step_;
+  const uint64_t response_delay_;
 
   std::pair<std::string, std::string> restricted_kv_{"", ""};
 };
@@ -234,6 +236,14 @@ template <typename ResponderType, typename RequestType, typename ResponseType>
 void
 CommonCallData<ResponderType, RequestType, ResponseType>::WriteResponse()
 {
+  if (response_delay_ != 0) {
+    // Will delay the write of the response by the specified time.
+    // This can be used to test the flow where there are other
+    // responses available to be written.
+    LOG_VERBOSE(1) << "Delaying the write of the response by "
+                   << response_delay_ << " seconds";
+    std::this_thread::sleep_for(std::chrono::seconds(response_delay_));
+  }
   step_ = Steps::COMPLETE;
   responder_.Finish(response_, status_, this);
 }
@@ -253,7 +263,8 @@ class CommonHandler : public HandlerBase {
       inference::GRPCInferenceService::AsyncService* service,
       ::grpc::health::v1::Health::AsyncService* health_service,
       ::grpc::ServerCompletionQueue* cq,
-      const RestrictedFeatures& restricted_keys);
+      const RestrictedFeatures& restricted_keys,
+      const unit64_t response_delay = 0);
 
   // Descriptive name of of the handler.
   const std::string& Name() const { return name_; }
@@ -299,6 +310,7 @@ class CommonHandler : public HandlerBase {
   ::grpc::ServerCompletionQueue* cq_;
   std::unique_ptr<std::thread> thread_;
   const RestrictedFeatures& restricted_keys_;
+  const uint64_t response_delay_ = 0;
 };
 
 CommonHandler::CommonHandler(
@@ -309,11 +321,12 @@ CommonHandler::CommonHandler(
     inference::GRPCInferenceService::AsyncService* service,
     ::grpc::health::v1::Health::AsyncService* health_service,
     ::grpc::ServerCompletionQueue* cq,
-    const RestrictedFeatures& restricted_keys)
+    const RestrictedFeatures& restricted_keys,
+    const uint64_t response_delay = 0)
     : name_(name), tritonserver_(tritonserver), shm_manager_(shm_manager),
       trace_manager_(trace_manager), service_(service),
       health_service_(health_service), cq_(cq),
-      restricted_keys_(restricted_keys)
+      restricted_keys_(restricted_keys), response_delay_(response_delay)
 {
 }
 
@@ -440,7 +453,7 @@ CommonHandler::RegisterServerLive()
       ::grpc::ServerAsyncResponseWriter<inference::ServerLiveResponse>,
       inference::ServerLiveRequest, inference::ServerLiveResponse>(
       "ServerLive", 0, OnRegisterServerLive, OnExecuteServerLive,
-      false /* async */, cq_, restricted_kv);
+      false /* async */, cq_, restricted_kv, response_delay_);
 }
 
 void
@@ -476,7 +489,7 @@ CommonHandler::RegisterServerReady()
       ::grpc::ServerAsyncResponseWriter<inference::ServerReadyResponse>,
       inference::ServerReadyRequest, inference::ServerReadyResponse>(
       "ServerReady", 0, OnRegisterServerReady, OnExecuteServerReady,
-      false /* async */, cq_, restricted_kv);
+      false /* async */, cq_, restricted_kv, response_delay_);
 }
 
 void
@@ -525,7 +538,7 @@ CommonHandler::RegisterHealthCheck()
       ::grpc::health::v1::HealthCheckRequest,
       ::grpc::health::v1::HealthCheckResponse>(
       "Check", 0, OnRegisterHealthCheck, OnExecuteHealthCheck,
-      false /* async */, cq_, restricted_kv);
+      false /* async */, cq_, restricted_kv, response_delay_);
 }
 
 void
@@ -567,7 +580,7 @@ CommonHandler::RegisterModelReady()
       ::grpc::ServerAsyncResponseWriter<inference::ModelReadyResponse>,
       inference::ModelReadyRequest, inference::ModelReadyResponse>(
       "ModelReady", 0, OnRegisterModelReady, OnExecuteModelReady,
-      false /* async */, cq_, restricted_kv);
+      false /* async */, cq_, restricted_kv, response_delay_);
 }
 
 void
@@ -645,7 +658,7 @@ CommonHandler::RegisterServerMetadata()
       ::grpc::ServerAsyncResponseWriter<inference::ServerMetadataResponse>,
       inference::ServerMetadataRequest, inference::ServerMetadataResponse>(
       "ServerMetadata", 0, OnRegisterServerMetadata, OnExecuteServerMetadata,
-      false /* async */, cq_, restricted_kv);
+      false /* async */, cq_, restricted_kv, response_delay_);
 }
 
 void
@@ -813,7 +826,7 @@ CommonHandler::RegisterModelMetadata()
       ::grpc::ServerAsyncResponseWriter<inference::ModelMetadataResponse>,
       inference::ModelMetadataRequest, inference::ModelMetadataResponse>(
       "ModelMetadata", 0, OnRegisterModelMetadata, OnExecuteModelMetadata,
-      false /* async */, cq_, restricted_kv);
+      false /* async */, cq_, restricted_kv, response_delay_);
 }
 
 void
@@ -866,7 +879,7 @@ CommonHandler::RegisterModelConfig()
       ::grpc::ServerAsyncResponseWriter<inference::ModelConfigResponse>,
       inference::ModelConfigRequest, inference::ModelConfigResponse>(
       "ModelConfig", 0, OnRegisterModelConfig, OnExecuteModelConfig,
-      false /* async */, cq_, restricted_kv);
+      false /* async */, cq_, restricted_kv, response_delay_);
 }
 
 void
@@ -1196,7 +1209,7 @@ CommonHandler::RegisterModelStatistics()
       ::grpc::ServerAsyncResponseWriter<inference::ModelStatisticsResponse>,
       inference::ModelStatisticsRequest, inference::ModelStatisticsResponse>(
       "ModelStatistics", 0, OnRegisterModelStatistics, OnExecuteModelStatistics,
-      false /* async */, cq_, restricted_kv);
+      false /* async */, cq_, restricted_kv, response_delay_);
 }
 
 void
@@ -1471,7 +1484,7 @@ CommonHandler::RegisterTrace()
       ::grpc::ServerAsyncResponseWriter<inference::TraceSettingResponse>,
       inference::TraceSettingRequest, inference::TraceSettingResponse>(
       "Trace", 0, OnRegisterTrace, OnExecuteTrace, false /* async */, cq_,
-      restricted_kv);
+      restricted_kv, response_delay_);
 }
 
 void
@@ -1680,7 +1693,7 @@ CommonHandler::RegisterLogging()
       ::grpc::ServerAsyncResponseWriter<inference::LogSettingsResponse>,
       inference::LogSettingsRequest, inference::LogSettingsResponse>(
       "Logging", 0, OnRegisterLogging, OnExecuteLogging, false /* async */, cq_,
-      restricted_kv);
+      restricted_kv, response_delay_);
 }
 
 void
@@ -1754,7 +1767,8 @@ CommonHandler::RegisterSystemSharedMemoryStatus()
       inference::SystemSharedMemoryStatusRequest,
       inference::SystemSharedMemoryStatusResponse>(
       "SystemSharedMemoryStatus", 0, OnRegisterSystemSharedMemoryStatus,
-      OnExecuteSystemSharedMemoryStatus, false /* async */, cq_, restricted_kv);
+      OnExecuteSystemSharedMemoryStatus, false /* async */, cq_, restricted_kv,
+      response_delay_);
 }
 
 void
@@ -1793,7 +1807,7 @@ CommonHandler::RegisterSystemSharedMemoryRegister()
       inference::SystemSharedMemoryRegisterResponse>(
       "SystemSharedMemoryRegister", 0, OnRegisterSystemSharedMemoryRegister,
       OnExecuteSystemSharedMemoryRegister, false /* async */, cq_,
-      restricted_kv);
+      restricted_kv, response_delay_);
 }
 
 void
@@ -1836,7 +1850,7 @@ CommonHandler::RegisterSystemSharedMemoryUnregister()
       inference::SystemSharedMemoryUnregisterResponse>(
       "SystemSharedMemoryUnregister", 0, OnRegisterSystemSharedMemoryUnregister,
       OnExecuteSystemSharedMemoryUnregister, false /* async */, cq_,
-      restricted_kv);
+      restricted_kv, response_delay_);
 }
 
 void
@@ -1902,7 +1916,8 @@ CommonHandler::RegisterCudaSharedMemoryStatus()
       inference::CudaSharedMemoryStatusRequest,
       inference::CudaSharedMemoryStatusResponse>(
       "CudaSharedMemoryStatus", 0, OnRegisterCudaSharedMemoryStatus,
-      OnExecuteCudaSharedMemoryStatus, false /* async */, cq_, restricted_kv);
+      OnExecuteCudaSharedMemoryStatus, false /* async */, cq_, restricted_kv,
+      response_delay_);
 }
 
 void
@@ -1952,7 +1967,8 @@ CommonHandler::RegisterCudaSharedMemoryRegister()
       inference::CudaSharedMemoryRegisterRequest,
       inference::CudaSharedMemoryRegisterResponse>(
       "CudaSharedMemoryRegister", 0, OnRegisterCudaSharedMemoryRegister,
-      OnExecuteCudaSharedMemoryRegister, false /* async */, cq_, restricted_kv);
+      OnExecuteCudaSharedMemoryRegister, false /* async */, cq_, restricted_kv,
+      response_delay_);
 }
 
 void
@@ -1995,7 +2011,7 @@ CommonHandler::RegisterCudaSharedMemoryUnregister()
       inference::CudaSharedMemoryUnregisterResponse>(
       "CudaSharedMemoryUnregister", 0, OnRegisterCudaSharedMemoryUnregister,
       OnExecuteCudaSharedMemoryUnregister, false /* async */, cq_,
-      restricted_kv);
+      restricted_kv, response_delay_);
 }
 
 void
@@ -2097,7 +2113,7 @@ CommonHandler::RegisterRepositoryIndex()
       ::grpc::ServerAsyncResponseWriter<inference::RepositoryIndexResponse>,
       inference::RepositoryIndexRequest, inference::RepositoryIndexResponse>(
       "RepositoryIndex", 0, OnRegisterRepositoryIndex, OnExecuteRepositoryIndex,
-      false /* async */, cq_, restricted_kv);
+      false /* async */, cq_, restricted_kv, response_delay_);
 }
 
 void
@@ -2209,7 +2225,8 @@ CommonHandler::RegisterRepositoryModelLoad()
       inference::RepositoryModelLoadRequest,
       inference::RepositoryModelLoadResponse>(
       "RepositoryModelLoad", 0, OnRegisterRepositoryModelLoad,
-      OnExecuteRepositoryModelLoad, true /* async */, cq_, restricted_kv);
+      OnExecuteRepositoryModelLoad, true /* async */, cq_, restricted_kv,
+      response_delay_);
 }
 
 void
@@ -2278,7 +2295,8 @@ CommonHandler::RegisterRepositoryModelUnload()
       inference::RepositoryModelUnloadRequest,
       inference::RepositoryModelUnloadResponse>(
       "RepositoryModelUnload", 0, OnRegisterRepositoryModelUnload,
-      OnExecuteRepositoryModelUnload, true /* async */, cq_, restricted_kv);
+      OnExecuteRepositoryModelUnload, true /* async */, cq_, restricted_kv,
+      response_delay_);
 }
 
 }  // namespace
@@ -2388,9 +2406,15 @@ Server::Server(
   model_stream_infer_cq_ = builder_.AddCompletionQueue();
 
   // A common Handler for other non-inference requests
+  const char* dstr = getenv("TRITONSERVER_SERVER_DELAY_GRPC_RESPONSE_SEC");
+  uint64_t response_delay = 0;
+  if (dstr != nullptr) {
+    response_delay = atoi(dstr);
+  }
   common_handler_.reset(new CommonHandler(
       "CommonHandler", tritonserver_, shm_manager_, trace_manager_, &service_,
-      &health_service_, common_cq_.get(), options.restricted_protocols_));
+      &health_service_, common_cq_.get(), options.restricted_protocols_,
+      response_delay));
 
   // [FIXME] "register" logic is different for infer
   // Handler for model inference requests.
